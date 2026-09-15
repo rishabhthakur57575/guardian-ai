@@ -1,0 +1,64 @@
+{
+  "evaluation_dataset_size": 3750,
+  "metrics": {
+    "accuracy": 0.9768,
+    "precision_macro": 0.97674,
+    "precision_weighted": 0.97672,
+    "recall_macro": 0.96845,
+    "recall_weighted": 0.9768,
+    "f1_macro": 0.97244,
+    "f1_weighted": 0.97664,
+    "roc_auc_macro": 0.98921,
+    "roc_auc_weighted": 0.99043
+  },
+  "per_class_metrics": {
+    "LEGITIMATE": {
+      "precision": 0.97483,
+      "recall": 0.99114,
+      "f1_score": 0.98292,
+      "sample_count": 2032
+    },
+    "SUSPICIOUS": {
+      "precision": 0.96291,
+      "recall": 0.92494,
+      "f1_score": 0.94354,
+      "sample_count": 786
+    },
+    "COACHED_SCAM": {
+      "precision": 0.99247,
+      "recall": 0.98927,
+      "f1_score": 0.99087,
+      "sample_count": 932
+    }
+  },
+  "false_positive_rates": {
+    "fpr_legitimate": 0.03027,
+    "fpr_suspicious": 0.00945,
+    "fpr_coached_scam": 0.00248,
+    "fpr_legitimate_false_alarm_rate": 0.00886
+  },
+  "confusion_matrix": {
+    "matrix": [
+      [
+        2014,
+        18,
+        0
+      ],
+      [
+        52,
+        727,
+        7
+      ],
+      [
+        0,
+        10,
+        922
+      ]
+    ],
+    "labels": [
+      "LEGITIMATE",
+      "SUSPICIOUS",
+      "COACHED_SCAM"
+    ]
+  }
+}

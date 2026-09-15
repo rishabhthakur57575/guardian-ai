@@ -1,0 +1,118 @@
+{
+  "model_type": "XGBClassifier",
+  "xgb_version": "3.4.1",
+  "num_classes": 3,
+  "class_mapping": {
+    "0": "LEGITIMATE",
+    "1": "SUSPICIOUS",
+    "2": "COACHED_SCAM"
+  },
+  "feature_names": [
+    "screen_share_duration",
+    "banking_app_opened",
+    "new_beneficiary",
+    "transaction_amount",
+    "app_switch_count",
+    "session_duration",
+    "time_between_events",
+    "known_assistant",
+    "first_time_assistance",
+    "transaction_velocity",
+    "navigation_back_count",
+    "authentication_event",
+    "assistance_history",
+    "screen_share_ratio",
+    "untrusted_assistance",
+    "coached_triad",
+    "log_transaction_amount",
+    "app_switch_rate",
+    "navigation_back_rate",
+    "pacing_cadence_score",
+    "assistance_trust_index",
+    "high_value_new_payee",
+    "coached_pressure_index"
+  ],
+  "top_features": [
+    {
+      "coached_pressure_index": 0.3353286683559418
+    },
+    {
+      "untrusted_assistance": 0.12604661285877228
+    },
+    {
+      "known_assistant": 0.10002795606851578
+    },
+    {
+      "screen_share_ratio": 0.09257779270410538
+    },
+    {
+      "assistance_trust_index": 0.06717052310705185
+    },
+    {
+      "first_time_assistance": 0.06546279788017273
+    },
+    {
+      "transaction_velocity": 0.0574362687766552
+    },
+    {
+      "screen_share_duration": 0.03260822221636772
+    },
+    {
+      "assistance_history": 0.02543242834508419
+    },
+    {
+      "transaction_amount": 0.022724084556102753
+    },
+    {
+      "log_transaction_amount": 0.0225827619433403
+    },
+    {
+      "app_switch_count": 0.019425397738814354
+    },
+    {
+      "coached_triad": 0.014825675636529922
+    },
+    {
+      "navigation_back_count": 0.005192461423575878
+    },
+    {
+      "high_value_new_payee": 0.004190126433968544
+    },
+    {
+      "new_beneficiary": 0.0027347072027623653
+    },
+    {
+      "app_switch_rate": 0.0015465345932170749
+    },
+    {
+      "session_duration": 0.001520243240520358
+    },
+    {
+      "time_between_events": 0.0010446822270751
+    },
+    {
+      "pacing_cadence_score": 0.0009460818255320191
+    },
+    {
+      "navigation_back_rate": 0.0005889448802918196
+    },
+    {
+      "authentication_event": 0.0005869418382644653
+    },
+    {
+      "banking_app_opened": 0.0
+    }
+  ],
+  "training_duration_sec": 5.47,
+  "best_iteration": 30,
+  "validation_metrics": {
+    "accuracy": 0.9757,
+    "f1_score_weighted": 0.9756,
+    "log_loss": 0.2958
+  },
+  "thresholds": {
+    "low_risk_max": 30.0,
+    "medium_risk_max": 70.0,
+    "high_risk_min": 70.0
+  }
+}
