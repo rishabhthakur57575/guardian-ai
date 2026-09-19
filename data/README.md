@@ -1,16 +1,22 @@
-# GuardianAI - Data Engineering & Synthetic Datasets
+# GuardianAI - Synthetic Behavioural Telemetry Dataset
 
-This directory contains privacy-safe synthetic datasets and schema definitions for behavioural scam detection modeling.
+This directory hosts the behavioural telemetry schema and synthetic dataset for GuardianAI's scam and assisted banking risk engine.
 
-## Synthetic Dataset Generation Plan
-To respect user privacy and avoid training on real financial records, Phase 2 will generate synthetic behavioural traces modeling:
-1. **Legitimate Workflows**: Routine banking transfers, bill payments, multi-tasking without screen sharing.
-2. **Benign Screen Sharing**: Tech support sessions, presentation sharing, gaming streams without banking activity.
-3. **Coached Scam Scenarios**:
-   - AnyDesk / TeamViewer download prompted by phone caller.
-   - Immediate navigation to banking portals / UPI apps.
-   - Rapid addition of unknown payee accounts.
-   - High-value emergency transfers (impostor tax refund, electricity bill disconnection threat, fake police KYC).
+## Files
+- `synthetic_behavioural_data.csv`: 25,000 generated interaction sequences with realistic non-linear distributions and boundary noise.
+- `schema.json`: JSON Schema defining the real-time event streaming telemetry protocol.
 
-## Zero-PII Guarantee
-All synthetic and telemetry records adhere to the schema in [`schema.json`](./schema.json) with strict omission of PII, OTPs, credentials, and screen images.
+## Dataset Structure
+- Total Rows: 25,000
+- Total Columns: 15 (13 base features + `label` + `label_name`)
+
+### Class Proportions:
+- `LEGITIMATE` (Class 0): ~54.2% (13,547 rows)
+- `SUSPICIOUS` (Class 1): ~20.9% (5,237 rows)
+- `COACHED_SCAM` (Class 2): ~24.9% (6,216 rows)
+
+## Generation Script
+To regenerate with custom seeds or sample volumes:
+```bash
+python ml/generate_data.py --samples 25000 --output data/synthetic_behavioural_data.csv --seed 42 --noise 0.035
+```
