@@ -1,9 +1,15 @@
 import uuid
 import json
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any
 from sqlalchemy.orm import Session
+
 from backend.app.db.models import SessionModel, EventModel, InterventionModel
+from backend.app.services.session_service import get_or_create_session, update_session_risk
 from backend.app.services.risk_engine import evaluate_session_risk
+
+logger = logging.getLogger("guardianai.simulator")
 
 SIMULATOR_STEPS = [
     {
@@ -76,28 +82,23 @@ SIMULATOR_STEPS = [
 ]
 
 def get_or_create_active_session(db: Session, session_id: str = "demo-session-live") -> SessionModel:
-    sess = db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
-    if not sess:
-        sess = SessionModel(
-            session_id=session_id,
-            start_time=datetime.utcnow(),
-            risk_score=0.0,
-            risk_level="SAFE",
-            final_outcome="ACTIVE"
-        )
-        db.add(sess)
-        db.commit()
-        db.refresh(sess)
-    return sess
+    return get_or_create_session(db, session_id)
 
-def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -> dict:
+def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -> Dict[str, Any]:
     sess = get_or_create_active_session(db, session_id)
-    existing_events = db.query(EventModel).filter(EventModel.session_id == session_id).order_by(EventModel.timestamp).all()
+    existing_events = (
+        db.query(EventModel)
+        .filter(EventModel.session_id == session_id)
+        .order_by(EventModel.timestamp)
+        .all()
+    )
     current_step_count = len(existing_events)
 
     if current_step_count >= len(SIMULATOR_STEPS):
-        # Already at max step, return current state
-        risk_res = evaluate_session_risk(session_id, [{"event_type": e.event_type, "metadata": e.event_metadata} for e in existing_events])
+        risk_res = evaluate_session_risk(
+            session_id,
+            [{"event_type": e.event_type, "metadata": e.event_metadata, "timestamp": e.timestamp} for e in existing_events]
+        )
         return {
             "status": "COMPLETED",
             "message": "Simulator reached final stage.",
@@ -107,10 +108,12 @@ def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -
         }
 
     next_step_data = SIMULATOR_STEPS[current_step_count]
+    now = datetime.now(timezone.utc)
+
     new_event = EventModel(
         event_id=f"ev_{uuid.uuid4().hex[:12]}",
         session_id=session_id,
-        timestamp=datetime.utcnow(),
+        timestamp=now,
         event_type=next_step_data["event_type"],
         metadata_json=json.dumps(next_step_data["metadata"])
     )
@@ -118,11 +121,18 @@ def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -
     db.commit()
 
     # Re-evaluate all events for updated risk
-    all_events = db.query(EventModel).filter(EventModel.session_id == session_id).order_by(EventModel.timestamp).all()
-    events_payload = [{"event_type": e.event_type, "metadata": e.event_metadata} for e in all_events]
+    all_events = (
+        db.query(EventModel)
+        .filter(EventModel.session_id == session_id)
+        .order_by(EventModel.timestamp)
+        .all()
+    )
+    events_payload = [
+        {"event_type": e.event_type, "metadata": e.event_metadata, "timestamp": e.timestamp}
+        for e in all_events
+    ]
     risk_evaluation = evaluate_session_risk(session_id, events_payload)
 
-    # Update session model
     sess.risk_score = risk_evaluation.risk_score
     sess.risk_level = risk_evaluation.risk_level
 
@@ -131,7 +141,7 @@ def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -
         intervention = InterventionModel(
             intervention_id=f"int_{uuid.uuid4().hex[:12]}",
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=now,
             risk_score=risk_evaluation.risk_score,
             action="TRANSACTION_HALTED",
             user_response="PENDING"
@@ -142,6 +152,8 @@ def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -
     db.commit()
     db.refresh(sess)
 
+    logger.info("Simulator advanced to step %d for session %s", current_step_count + 1, session_id)
+
     return {
         "status": "STEP_ADVANCED",
         "current_step": current_step_count + 1,
@@ -151,23 +163,23 @@ def advance_simulator_step(db: Session, session_id: str = "demo-session-live") -
         "risk": risk_evaluation.model_dump()
     }
 
-def reset_simulator(db: Session, session_id: str = "demo-session-live") -> dict:
-    # Remove existing events and interventions for this session
+def reset_simulator(db: Session, session_id: str = "demo-session-live") -> Dict[str, Any]:
     db.query(InterventionModel).filter(InterventionModel.session_id == session_id).delete()
     db.query(EventModel).filter(EventModel.session_id == session_id).delete()
     db.query(SessionModel).filter(SessionModel.session_id == session_id).delete()
     db.commit()
 
-    # Recreate fresh session
     new_sess = SessionModel(
         session_id=session_id,
-        start_time=datetime.utcnow(),
+        start_time=datetime.now(timezone.utc),
         risk_score=0.0,
         risk_level="SAFE",
         final_outcome="ACTIVE"
     )
     db.add(new_sess)
     db.commit()
+
+    logger.info("Reset simulator session %s to SAFE state", session_id)
 
     return {
         "status": "RESET_SUCCESSFUL",
@@ -176,12 +188,11 @@ def reset_simulator(db: Session, session_id: str = "demo-session-live") -> dict:
     }
 
 def seed_sample_historical_data(db: Session):
-    # Check if sessions exist already
     count = db.query(SessionModel).count()
     if count > 1:
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     sample_sessions = [
         {
             "session_id": "hist-sess-01",
@@ -270,3 +281,4 @@ def seed_sample_historical_data(db: Session):
             db.add(inv)
 
     db.commit()
+    logger.info("Sample historical telemetry seeded successfully.")
