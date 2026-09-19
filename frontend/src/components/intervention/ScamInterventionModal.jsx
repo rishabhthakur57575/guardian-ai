@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ShieldAlert, Check, X, ShieldX } from 'lucide-react';
+import { 
+  AlertTriangle, ShieldAlert, Check, X, ShieldX, 
+  HelpCircle, PhoneCall, Info, Lock, ArrowRight, AlertCircle 
+} from 'lucide-react';
 import { useSecurity } from '../../context/SecurityContext';
 
 export const ScamInterventionModal = () => {
@@ -18,8 +21,8 @@ export const ScamInterventionModal = () => {
   const defaultReasons = [
     'A remote person is currently viewing your screen (AnyDesk / TeamViewer).',
     'A banking application was opened while screen sharing is active.',
-    'A new beneficiary was added quickly.',
-    'A large money transfer of ₹1,85,000 is about to be sent.'
+    'A new beneficiary payee was added in rapid succession.',
+    'A high-value fund transfer of ₹1,85,000 is queued to be sent.'
   ];
 
   const reasons = (riskEvaluation.reasons && riskEvaluation.reasons.length > 0)
@@ -40,84 +43,111 @@ export const ScamInterventionModal = () => {
     }
   };
 
+  const transferAmount = activeTelemetry.transaction.amount || 185000;
+  const payeeLabel = activeTelemetry.transaction.beneficiary || activeTelemetry.beneficiary.label || 'Fast_Reversal_Desk_94';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-[#111827] border-2 border-red-500 rounded-2xl shadow-2xl p-6 md:p-8 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+      <div className="relative w-full max-w-xl bg-[#0d1424] border-2 border-red-500/80 rounded-2xl shadow-2xl shadow-red-950/80 p-6 md:p-8 text-white">
         
-        {/* Header */}
-        <div className="flex items-center gap-4 border-b border-slate-800 pb-5 mb-5">
-          <div className="w-14 h-14 rounded-xl bg-red-600 flex items-center justify-center shrink-0">
+        {/* Top Alert Header */}
+        <div className="flex items-start gap-4 border-b border-slate-800 pb-5 mb-5">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center shrink-0 shadow-lg shadow-red-950/60 ring-2 ring-red-400/40">
             <ShieldAlert className="w-8 h-8 text-white" />
           </div>
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800/60">
-              High Risk Warning
-            </span>
-            <h2 className="text-2xl md:text-3xl font-bold text-white mt-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-red-300 bg-red-950 px-2.5 py-0.5 rounded-full border border-red-700/60 font-mono">
+                Urgent Security Interception
+              </span>
+              <span className="text-xs text-red-400 font-mono font-bold">
+                Risk: {Math.round(riskEvaluation.risk_score || 94)}%
+              </span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-black text-white mt-1 tracking-tight">
               POSSIBLE SCAM DETECTED
             </h2>
           </div>
         </div>
 
-        {/* Plain Language Reassurance */}
-        <div className="bg-red-950/30 border border-red-500/30 rounded-xl p-4 mb-5">
-          <p className="text-base font-semibold text-red-200 leading-snug">
-            Someone on a phone call may be watching your screen while you send money.
+        {/* Clear Primary Warning for Elderly / Non-Technical Users */}
+        <div className="bg-red-950/40 border border-red-500/40 rounded-xl p-4 mb-5">
+          <p className="text-base md:text-lg font-bold text-red-200 leading-snug">
+            Someone may be remotely guiding you through this banking transaction.
           </p>
-          <p className="text-sm text-slate-300 mt-1.5">
-            Banks, electricity departments, and police will <strong>never</strong> ask you to share your screen to send money or receive refunds.
-          </p>
+          <div className="mt-2 flex items-start gap-2 text-xs text-slate-300">
+            <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+            <p>
+              Banks, police, electricity boards, and customer care will <strong>never</strong> ask you to install screen sharing tools (AnyDesk, TeamViewer) or send money to receive a refund or KYC update.
+            </p>
+          </div>
         </div>
 
-        {/* Detected Reasons */}
+        {/* Plain Language Detected Reasons */}
         <div className="mb-5">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-            Why GuardianAI flagged this transaction:
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 font-mono">
+            Why GuardianAI stopped this transfer:
           </h3>
           <ul className="space-y-2">
             {reasons.map((reason, idx) => (
-              <li key={idx} className="flex items-start gap-2.5 text-sm bg-slate-900 p-3 rounded-lg border border-slate-800">
-                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+              <li 
+                key={idx} 
+                className="flex items-start gap-3 text-xs md:text-sm bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-slate-200"
+              >
+                <div className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                   !
-                </span>
-                <span className="text-slate-200 font-medium">{reason}</span>
+                </div>
+                <span className="font-medium leading-snug">{reason}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        {/* Transaction Amount Box */}
-        <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between mb-5">
+        {/* Transaction Summary Box */}
+        <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex items-center justify-between mb-5">
           <div>
-            <span className="text-[11px] text-slate-400 uppercase font-semibold">Amount to be Sent</span>
-            <p className="text-xl font-bold text-amber-400">₹1,85,000</p>
-          </div>
-          <div className="text-right">
-            <span className="text-[11px] text-slate-400 uppercase font-semibold">Risk Score</span>
-            <p className="text-sm font-bold text-red-400 font-mono">
-              {Math.round(riskEvaluation.risk_score || 94)}% (CRITICAL)
+            <span className="text-[10px] text-slate-400 uppercase font-semibold font-mono">Pending Transfer</span>
+            <p className="text-xl md:text-2xl font-black text-amber-400 font-mono">
+              ₹{Number(transferAmount).toLocaleString('en-IN')}
             </p>
+            <span className="text-[11px] text-slate-400">
+              Recipient: <strong className="text-slate-200 font-mono">{payeeLabel}</strong>
+            </span>
+          </div>
+
+          <div className="text-right">
+            <span className="text-[10px] text-slate-400 uppercase font-semibold font-mono">Status</span>
+            <div className="px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/50 text-red-300 font-mono font-bold text-xs mt-1">
+              PAUSED FOR SAFETY
+            </div>
           </div>
         </div>
 
         {/* Double-confirmation warning if trust clicked */}
         {confirmOverride && (
-          <div className="mb-5 p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-amber-200 text-xs">
-            <p className="font-bold">Are you sure you know this person in real life?</p>
-            <p className="text-slate-300 mt-0.5">If they asked you to install AnyDesk or TeamViewer, this is almost certainly a scam.</p>
+          <div className="mb-5 p-4 rounded-xl bg-amber-950/60 border border-amber-500 text-amber-200 text-xs animate-fade-in">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-sm text-white">Do you personally know this person in real life?</p>
+                <p className="text-slate-300 mt-1 leading-relaxed">
+                  If they contacted you unexpectedly claiming to be bank support, refund agents, or government officials, this is a fraudulent scam. Proceeding will send non-refundable funds.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Action Buttons */}
+        {/* High Impact Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Primary Cancel Button */}
           <button
             onClick={handleCancel}
-            className="flex-1 py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base transition-colors flex items-center justify-center gap-2"
+            className="flex-1 py-4 px-5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-base md:text-lg transition-all shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2.5"
           >
-            <ShieldX className="w-5 h-5" />
+            <ShieldX className="w-6 h-6 shrink-0" />
             <span>Cancel Transaction</span>
-            <span className="text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded text-emerald-200 uppercase font-semibold">
+            <span className="text-[10px] bg-emerald-950 text-emerald-200 px-2 py-0.5 rounded-full uppercase font-mono font-extrabold ml-1">
               Recommended
             </span>
           </button>
@@ -125,26 +155,29 @@ export const ScamInterventionModal = () => {
           {/* Secondary Trust Button */}
           <button
             onClick={handleTrust}
-            className={`py-3 px-4 rounded-xl text-xs font-semibold border transition-colors ${
+            className={`py-3.5 px-4 rounded-xl text-xs font-bold border transition-all ${
               confirmOverride
-                ? 'bg-amber-600 hover:bg-amber-500 text-black border-amber-400 font-bold'
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-300 shadow-lg font-black'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
           >
-            {confirmOverride ? 'Confirm & Trust Person' : 'I Trust This Person'}
+            {confirmOverride ? 'Confirm: I Take Full Risk & Trust Payee' : 'I Trust This Person'}
           </button>
         </div>
 
-        {/* Dismiss for demo */}
-        <div className="text-center mt-3">
+        {/* Reassurance text */}
+        <div className="text-center mt-4">
+          <p className="text-[11px] text-slate-400">
+            Cancelling stops the transaction immediately. Your account balance remains completely safe.
+          </p>
           <button
             onClick={() => {
               setIsInterventionModalOpen(false);
               setConfirmOverride(false);
             }}
-            className="text-[11px] text-slate-500 hover:text-slate-300 underline"
+            className="text-[11px] text-slate-500 hover:text-slate-300 underline mt-2 block mx-auto"
           >
-            Close warning modal (demo)
+            Close modal (demo preview)
           </button>
         </div>
 
