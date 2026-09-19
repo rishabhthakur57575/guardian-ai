@@ -1,64 +1,46 @@
+import logging
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from backend.app.db.session import get_db
-from backend.app.db.models import SessionModel, EventModel, InterventionModel
-from backend.app.schemas.schemas import SessionResponse, SessionSummary, EventResponse, InterventionResponse
 
+from backend.app.db.session import get_db
+from backend.app.schemas.schemas import SessionResponse, SessionSummary
+from backend.app.services.session_service import get_session_details, list_sessions as fetch_sessions
+
+logger = logging.getLogger("guardianai.api.sessions")
 router = APIRouter()
 
-@router.get("/session/{session_id}", response_model=SessionResponse, summary="Get full session details with events and interventions")
+@router.get(
+    "/session/{session_id}",
+    response_model=SessionResponse,
+    summary="Get full session details with events and interventions",
+    description="Retrieves active session state, current risk score, final outcome, and full chronological timeline of events and interventions."
+)
 def get_session_by_id(session_id: str, db: Session = Depends(get_db)):
-    sess = db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
-    if not sess:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    sess_details = get_session_details(db, session_id)
+    if not sess_details:
+        logger.warning("Session lookup failed: '%s' not found", session_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found"
+        )
+    return sess_details
 
-    events = db.query(EventModel).filter(EventModel.session_id == session_id).order_by(EventModel.timestamp).all()
-    interventions = db.query(InterventionModel).filter(InterventionModel.session_id == session_id).order_by(InterventionModel.timestamp).all()
-
-    return SessionResponse(
-        session_id=sess.session_id,
-        start_time=sess.start_time,
-        end_time=sess.end_time,
-        risk_score=sess.risk_score,
-        risk_level=sess.risk_level,
-        final_outcome=sess.final_outcome,
-        events=[
-            EventResponse(
-                event_id=e.event_id,
-                session_id=e.session_id,
-                timestamp=e.timestamp,
-                event_type=e.event_type,
-                metadata=e.event_metadata
-            )
-            for e in events
-        ],
-        interventions=[
-            InterventionResponse(
-                intervention_id=i.intervention_id,
-                session_id=i.session_id,
-                timestamp=i.timestamp,
-                risk_score=i.risk_score,
-                action=i.action,
-                user_response=i.user_response
-            )
-            for i in interventions
-        ]
-    )
-
-@router.get("/sessions", response_model=List[SessionSummary], summary="List all recent sessions")
-def list_sessions(db: Session = Depends(get_db)):
-    sessions = db.query(SessionModel).order_by(SessionModel.start_time.desc()).limit(20).all()
-    result = []
-    for s in sessions:
-        ev_count = db.query(EventModel).filter(EventModel.session_id == s.session_id).count()
-        result.append(SessionSummary(
-            session_id=s.session_id,
-            start_time=s.start_time,
-            end_time=s.end_time,
-            risk_score=s.risk_score,
-            risk_level=s.risk_level,
-            final_outcome=s.final_outcome,
-            event_count=ev_count
-        ))
-    return result
+@router.get(
+    "/sessions",
+    response_model=List[SessionSummary],
+    summary="List all recent sessions",
+    description="Returns a list of recent monitored sessions along with event counts and risk levels."
+)
+def list_sessions(
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of sessions to return"),
+    db: Session = Depends(get_db)
+):
+    try:
+        return fetch_sessions(db, limit=limit)
+    except Exception as exc:
+        logger.error("Failed to list sessions: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal error while listing monitored sessions."
+        )

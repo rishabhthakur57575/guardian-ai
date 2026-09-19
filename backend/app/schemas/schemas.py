@@ -9,20 +9,20 @@ FORBIDDEN_PRIVACY_KEYS = {
 }
 
 class EventBase(BaseModel):
-    event_type: str = Field(..., description="Type of behavioural telemetry event")
+    event_type: str = Field(..., min_length=2, description="Type of behavioural telemetry event")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Behavioural metadata strictly without PII")
 
     @field_validator("metadata")
     def validate_privacy(cls, v: Dict[str, Any]) -> Dict[str, Any]:
-        lowered_keys = {k.lower() for k in v.keys()}
+        lowered_keys = {str(k).lower() for k in v.keys()}
         violation = lowered_keys.intersection(FORBIDDEN_PRIVACY_KEYS)
         if violation:
-            raise ValueError(f"Privacy violation: sensitive keys prohibited: {list(violation)}")
+            raise ValueError(f"Privacy violation: sensitive keys prohibited: {sorted(list(violation))}")
         return v
 
 class EventCreate(EventBase):
-    session_id: str = Field(..., description="Session identifier")
-    timestamp: Optional[datetime] = None
+    session_id: str = Field(..., min_length=1, description="Session identifier")
+    timestamp: Optional[datetime] = Field(default=None, description="Event occurrence timestamp (UTC)")
 
 class EventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -34,8 +34,8 @@ class EventResponse(BaseModel):
     metadata: Dict[str, Any]
 
 class RiskScoreRequest(BaseModel):
-    session_id: str
-    events: Optional[List[EventBase]] = None
+    session_id: str = Field(..., min_length=1, description="Target session identifier")
+    events: Optional[List[EventBase]] = Field(default=None, description="Optional raw events list to evaluate without querying database")
 
 class RiskFactor(BaseModel):
     name: str
@@ -45,7 +45,7 @@ class RiskFactor(BaseModel):
 
 class RiskScoreResponse(BaseModel):
     session_id: str
-    risk_score: float = Field(..., description="Risk score between 0.0 and 100.0")
+    risk_score: float = Field(..., ge=0.0, le=100.0, description="Risk score between 0.0 and 100.0")
     risk_level: str = Field(..., description="SAFE, MONITORING, THREAT_DETECTED")
     reasons: List[str]
     risk_factors: List[RiskFactor]
@@ -53,10 +53,10 @@ class RiskScoreResponse(BaseModel):
     evaluated_at: datetime
 
 class InterventionCreate(BaseModel):
-    session_id: str
-    risk_score: float
-    action: str = "WARNING_DISPLAYED"
-    user_response: str = "PENDING" # CANCEL_TRANSACTION, TRUST_USER, PENDING
+    session_id: str = Field(..., min_length=1)
+    risk_score: float = Field(..., ge=0.0, le=100.0)
+    action: str = Field(default="WARNING_DISPLAYED", description="WARNING_DISPLAYED, TRANSACTION_HALTED")
+    user_response: str = Field(default="PENDING", description="CANCEL_TRANSACTION, TRUST_USER, PENDING")
 
 class InterventionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -73,7 +73,7 @@ class SessionResponse(BaseModel):
 
     session_id: str
     start_time: datetime
-    end_time: Optional[datetime]
+    end_time: Optional[datetime] = None
     risk_score: float
     risk_level: str
     final_outcome: str
@@ -83,7 +83,7 @@ class SessionResponse(BaseModel):
 class SessionSummary(BaseModel):
     session_id: str
     start_time: datetime
-    end_time: Optional[datetime]
+    end_time: Optional[datetime] = None
     risk_score: float
     risk_level: str
     final_outcome: str
@@ -103,7 +103,7 @@ class PatternFrequency(BaseModel):
     percentage: float
 
 class RiskDistribution(BaseModel):
-    range: str # e.g. "0-20", "21-40", etc.
+    range: str # e.g. "0 - 20 (Safe)", "21 - 40 (Normal)", etc.
     count: int
 
 class AnalyticsResponse(BaseModel):

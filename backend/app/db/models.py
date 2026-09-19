@@ -1,14 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from sqlalchemy import Column, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.app.db.session import Base
 
+def get_utc_now():
+    return datetime.now(timezone.utc)
+
 class SessionModel(Base):
     __tablename__ = "sessions"
 
     session_id = Column(String(64), primary_key=True, index=True)
-    start_time = Column(DateTime, default=datetime.utcnow, nullable=False)
+    start_time = Column(DateTime, default=get_utc_now, nullable=False)
     end_time = Column(DateTime, nullable=True)
     risk_score = Column(Float, default=0.0, nullable=False)
     risk_level = Column(String(32), default="SAFE", nullable=False) # SAFE, MONITORING, THREAT_DETECTED
@@ -22,7 +25,7 @@ class EventModel(Base):
 
     event_id = Column(String(64), primary_key=True, index=True)
     session_id = Column(String(64), ForeignKey("sessions.session_id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=get_utc_now, nullable=False)
     event_type = Column(String(64), nullable=False, index=True)
     # metadata stored as JSON string (privacy-first: only behavioural telemetry)
     metadata_json = Column(Text, default="{}", nullable=False)
@@ -45,7 +48,7 @@ class InterventionModel(Base):
 
     intervention_id = Column(String(64), primary_key=True, index=True)
     session_id = Column(String(64), ForeignKey("sessions.session_id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=get_utc_now, nullable=False)
     risk_score = Column(Float, default=0.0, nullable=False)
     action = Column(String(64), default="WARNING_DISPLAYED", nullable=False) # WARNING_DISPLAYED, TRANSACTION_HALTED
     user_response = Column(String(64), default="PENDING", nullable=False) # CANCEL_TRANSACTION, TRUST_USER, PENDING
