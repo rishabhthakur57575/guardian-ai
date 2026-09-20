@@ -19,12 +19,15 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from datetime import datetime, timezone
 from ml.feature_engineering import (
     RAW_FEATURES,
     ALL_MODEL_FEATURES,
     extract_features_from_dict
 )
 from ml.preprocessing import PreprocessingPipeline
+from ml.explainability import explain_prediction
+from ml.human_explanation import generate_human_explanation
 
 
 class GuardianRiskPredictor:
@@ -172,6 +175,42 @@ class GuardianRiskPredictor:
         # 6. Extract Threat Signals
         detected_signals = self._extract_detected_signals(raw_features, probs)
 
+        # 7. Compute SHAP-based Explainability
+        try:
+            shap_explanation = explain_prediction(raw_features, risk_score=risk_score)
+        except Exception as exc:
+            shap_explanation = {"error": f"SHAP calculation unavailable: {exc}"}
+
+        # 8. Compute Human-Friendly Plain-Language Explanation
+        try:
+            tech_signals = []
+            if isinstance(shap_explanation, dict) and "top_signals" in shap_explanation:
+                tech_signals = [s["signal"] for s in shap_explanation["top_signals"]]
+            if not tech_signals:
+                tech_signals = [s.lower() for s in detected_signals]
+
+            human_explanation = generate_human_explanation(tech_signals, context=raw_features)
+        except Exception as exc:
+            human_explanation = {
+                "headline": "Potential risk detected during session.",
+                "key_observations": detected_signals,
+                "recommended_action": "Verify the recipient and caller identity.",
+                "provider_type": "FALLBACK"
+            }
+
+        # 9. Format structured risk factors
+        risk_factors = []
+        if isinstance(shap_explanation, dict) and "top_signals" in shap_explanation:
+            for s in shap_explanation["top_signals"]:
+                pts = s.get("impact_points", 0)
+                if pts > 0:
+                    risk_factors.append({
+                        "name": s["display_name"],
+                        "severity": "CRITICAL" if pts >= 25 else ("HIGH" if pts >= 15 else ("MEDIUM" if pts >= 8 else "LOW")),
+                        "description": s.get("description", s["display_name"]),
+                        "weight": float(pts)
+                    })
+
         return {
             "risk_score": risk_score,
             "risk_level": risk_level,
@@ -181,33 +220,40 @@ class GuardianRiskPredictor:
                 "SUSPICIOUS": round(p_suspicious, 4),
                 "COACHED_SCAM": round(p_scam, 4)
             },
-            "detected_signals": detected_signals
+            "detected_signals": detected_signals,
+            "reasons": detected_signals,
+            "risk_factors": risk_factors,
+            "recommended_action": "INTERVENE" if risk_score >= 70.0 else ("MONITOR" if risk_score >= 30.0 else "NONE"),
+            "evaluated_at": datetime.now(timezone.utc),
+            "shap_explanation": shap_explanation,
+            "human_explanation": human_explanation
         }
 
 
-def predict_risk(features: Union[Dict[str, Any], pd.DataFrame, List[Dict[str, Any]]]) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+def predict_risk(
+    features: Union[Dict[str, Any], pd.DataFrame, List[Dict[str, Any]]],
+    session_id: str = ""
+) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """
-    Main clean interface for risk prediction.
+    Main clean interface for risk prediction with built-in SHAP & human explanations.
     Accepts raw feature dictionary (or list of dicts) and returns formatted risk assessments.
-
-    Parameters:
-    -----------
-    features : Dict[str, Any] or List[Dict[str, Any]]
-        Dictionary containing session telemetry keys.
-
-    Returns:
-    --------
-    Dict[str, Any]:
-        {
-            "risk_score": float,               # 0.0 - 100.0
-            "risk_level": "LOW"|"MEDIUM"|"HIGH",
-            "detected_signals": [...]
-        }
     """
     predictor = GuardianRiskPredictor.get_instance()
 
     if isinstance(features, dict):
-        return predictor.predict_one(features)
+        # If this is a Phase 1 heuristic feature dictionary (lacking ML raw telemetry features like screen_share_duration)
+        # raise ValueError so MLRiskPredictor falls back gracefully to HeuristicRiskPredictor without breaking Phase 1.
+        if ("banking_under_screen_share" in features or "screen_sharing_active" in features) and (
+            "screen_share_duration" not in features and "session_duration" not in features
+        ):
+            raise ValueError(
+                "Input features conform to Phase 1 heuristic schema; fallback to HeuristicRiskPredictor required."
+            )
+
+        res = predictor.predict_one(features)
+        if session_id:
+            res["session_id"] = session_id
+        return res
     elif isinstance(features, list):
         return [predictor.predict_one(f) for f in features]
     elif isinstance(features, pd.DataFrame):
