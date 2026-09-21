@@ -5,6 +5,8 @@ const SecurityContext = createContext(null);
 
 export const SecurityProvider = ({ children }) => {
   const [sessionId, setSessionId] = useState('demo-session-live');
+  const [selectedScenarioId, setSelectedScenarioId] = useState('coached_scam');
+  const [availableScenarios, setAvailableScenarios] = useState([]);
   const [session, setSession] = useState(null);
   const [sessionsList, setSessionsList] = useState([]);
   const [selectedTimelineSessionId, setSelectedTimelineSessionId] = useState('demo-session-live');
@@ -78,10 +80,13 @@ export const SecurityProvider = ({ children }) => {
         console.warn('Live session fetch warning:', sessErr);
       }
 
-      // 4. Simulator state
+      // 4. Simulator state & Scenarios
       try {
-        const simState = await apiService.getSimulatorState(sessionId);
+        const simState = await apiService.getSimulatorState(sessionId, selectedScenarioId);
         setSimulatorState(simState);
+        if (simState.scenarios) {
+          setAvailableScenarios(simState.scenarios);
+        }
       } catch (simErr) {
         console.warn('Simulator state fetch warning:', simErr);
       }
@@ -108,7 +113,7 @@ export const SecurityProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, selectedScenarioId]);
 
   // Initial load & periodic background telemetry sync
   useEffect(() => {
@@ -139,18 +144,41 @@ export const SecurityProvider = ({ children }) => {
     }
   }, [selectedTimelineSessionId, selectTimelineSession]);
 
+  // Switch scenario handler with unique session ID isolation
+  const switchScenario = useCallback(async (newScenarioId) => {
+    setIsAutoSimulating(false);
+    if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
+    setSelectedScenarioId(newScenarioId);
+    const randSuffix = Math.random().toString(36).substring(2, 7);
+    const newSessionId = `sim-${newScenarioId}-${randSuffix}`;
+    setSessionId(newSessionId);
+    try {
+      await apiService.simulatorReset(newSessionId, newScenarioId);
+      setIsInterventionModalOpen(false);
+      showToast(`Switched scenario to: ${newScenarioId.replace(/_/g, ' ')}`, 'info');
+    } catch (err) {
+      console.error('Error switching scenario:', err);
+      showToast('Error switching scenario on backend.', 'error');
+    }
+  }, [showToast]);
+
   // Step simulator forward
   const advanceSimulator = async () => {
     try {
-      const result = await apiService.simulatorStep(sessionId);
+      const result = await apiService.simulatorStep(sessionId, selectedScenarioId);
       if (result.status === 'STEP_ADVANCED') {
-        showToast(`Step ${result.current_step}/6: ${result.step_name}`, 'warning');
-        if (result.current_step === 6 || result.risk?.risk_level === 'THREAT_DETECTED') {
+        const isThreat = result.risk?.risk_level === 'THREAT_DETECTED';
+        showToast(
+          `Step ${result.current_step}/${result.total_steps}: ${result.step_name}`,
+          isThreat ? 'warning' : 'info'
+        );
+        if (result.event_type === 'INTERVENTION_TRIGGERED' || (isThreat && result.event_type !== 'TRANSACTION_CANCELLED')) {
           setIsInterventionModalOpen(true);
           setIsAutoSimulating(false);
         }
       } else if (result.status === 'COMPLETED') {
-        showToast('Simulator reached maximum scenario stage.', 'info');
+        showToast(`Scenario '${result.scenario_name || selectedScenarioId}' complete.`, 'info');
+        setIsAutoSimulating(false);
       }
       await refreshAllData();
       return result;
@@ -160,12 +188,12 @@ export const SecurityProvider = ({ children }) => {
     }
   };
 
-  // Reset simulator
+  // Reset simulator for the current scenario session
   const resetSimulator = async () => {
     try {
       setIsAutoSimulating(false);
       if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
-      await apiService.simulatorReset(sessionId);
+      await apiService.simulatorReset(sessionId, selectedScenarioId);
       setIsInterventionModalOpen(false);
       showToast('Simulation reset to clean baseline (Risk: 0.0% SAFE).', 'success');
       await refreshAllData();
@@ -179,21 +207,26 @@ export const SecurityProvider = ({ children }) => {
   useEffect(() => {
     if (isAutoSimulating) {
       autoPlayTimerRef.current = setInterval(async () => {
-        const simState = await apiService.getSimulatorState(sessionId);
-        if (simState.current_step >= 6) {
+        try {
+          const simState = await apiService.getSimulatorState(sessionId, selectedScenarioId);
+          if (simState.current_step >= simState.total_steps) {
+            setIsAutoSimulating(false);
+            clearInterval(autoPlayTimerRef.current);
+          } else {
+            await advanceSimulator();
+          }
+        } catch (e) {
           setIsAutoSimulating(false);
           clearInterval(autoPlayTimerRef.current);
-        } else {
-          await advanceSimulator();
         }
-      }, 2500);
+      }, 2400);
     } else {
       if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
     }
     return () => {
       if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
     };
-  }, [isAutoSimulating, sessionId]);
+  }, [isAutoSimulating, sessionId, selectedScenarioId]);
 
   // Handle Intervention Action (Cancel vs Trust)
   const handleInterventionAction = async (actionType) => {
@@ -207,9 +240,25 @@ export const SecurityProvider = ({ children }) => {
 
       setIsInterventionModalOpen(false);
       if (actionType === 'CANCEL_TRANSACTION') {
-        showToast('🛡️ Transaction Cancelled. Money is safe and transaction was halted.', 'success');
+        // Record simulated transaction cancellation event
+        try {
+          await apiService.postEvent({
+            session_id: sessionId,
+            event_type: 'TRANSACTION_CANCELLED',
+            metadata: {
+              transaction_cancelled: true,
+              simulated_action: true,
+              reason: 'USER_CANCELLED_AFTER_SCAM_WARNING',
+              transaction_amount: activeTelemetry.transaction.amount || 120000.0,
+              disclaimer: 'Simulated action: User cancelled transfer upon warning. No real banking transfer executed or blocked.'
+            }
+          });
+        } catch (evErr) {
+          console.warn('Cancellation event persistence note:', evErr);
+        }
+        showToast('Simulated Action: Transaction cancelled by user. (Simulated test action — no real bank transfer executed or blocked)', 'success');
       } else {
-        showToast('⚠️ Override recorded: User confirmed trust.', 'warning');
+        showToast('Manual Override Recorded: User confirmed trust for this transaction only. (Helper identity is not whitelisted)', 'warning');
       }
       await refreshAllData();
     } catch (err) {
@@ -296,6 +345,9 @@ export const SecurityProvider = ({ children }) => {
         toast,
         showToast,
         clearToast,
+        selectedScenarioId,
+        switchScenario,
+        availableScenarios,
         advanceSimulator,
         resetSimulator,
         handleInterventionAction,

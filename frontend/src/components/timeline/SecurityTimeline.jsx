@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Clock, Monitor, Smartphone, UserPlus, IndianRupee, Sparkles, 
   AlertOctagon, CheckCircle2, ShieldCheck, ShieldAlert, ShieldX, 
-  Filter, Search, Lock, RefreshCw, Calendar, ArrowRight, Activity
+  Filter, Search, Lock, RefreshCw, Calendar, ArrowRight, Activity, Zap, XCircle
 } from 'lucide-react';
 import { useSecurity } from '../../context/SecurityContext';
 
@@ -27,7 +27,10 @@ export const SecurityTimeline = () => {
 
   const rawEvents = currentSessionData?.events && currentSessionData.events.length > 0
     ? currentSessionData.events
-    : events;
+    : (selectedTimelineSessionId === session?.session_id ? events : []);
+
+  const activeSessId = currentSessionData?.session_id || selectedTimelineSessionId;
+  const isHistoricalSession = activeSessId ? activeSessId.startsWith('hist-') : false;
 
   const getEventMeta = (eventType) => {
     switch (eventType) {
@@ -39,45 +42,101 @@ export const SecurityTimeline = () => {
           color: 'text-amber-400 bg-amber-500/15 border-amber-500/40',
           severity: 'HIGH_ALERT'
         };
+      case 'SCREEN_SHARING_ENDED':
+        return { 
+          icon: Monitor, 
+          label: 'Screen sharing ended', 
+          desc: 'Remote screen sharing session concluded and connection closed.',
+          color: 'text-slate-400 bg-slate-800/80 border-slate-700',
+          severity: 'SESSION_CLOSED'
+        };
       case 'BANKING_APP_FOREGROUNDED':
         return { 
           icon: Smartphone, 
           label: 'Banking app opened', 
-          desc: 'Financial application foregrounded while screen visibility active.',
+          desc: 'Financial application foregrounded on the device.',
           color: 'text-cyan-400 bg-cyan-500/15 border-cyan-500/40',
           severity: 'MONITORING'
+        };
+      case 'BANKING_APP_CLOSED':
+        return { 
+          icon: Smartphone, 
+          label: 'Banking app closed', 
+          desc: 'Financial application exited safely.',
+          color: 'text-slate-400 bg-slate-800 border-slate-700',
+          severity: 'INFO'
         };
       case 'NEW_BENEFICIARY_ADDED':
         return { 
           icon: UserPlus, 
           label: 'New beneficiary added', 
-          desc: 'Rapid payee addition via clipboard paste in under 4 seconds.',
+          desc: 'Payee addition recorded in banking application.',
           color: 'text-purple-400 bg-purple-500/15 border-purple-500/40',
           severity: 'SUSPICIOUS'
         };
       case 'HIGH_VALUE_TRANSACTION_INITIATED':
         return { 
           icon: IndianRupee, 
-          label: 'High-value transaction initiated', 
-          desc: 'Instant IMPS outbound transfer exceeds typical baseline threshold.',
+          label: 'Transaction initiated', 
+          desc: 'Outbound fund transfer queued through banking payment rail.',
           color: 'text-amber-400 bg-amber-500/15 border-amber-500/40',
-          severity: 'CRITICAL_RISK'
+          severity: 'TRANSACTION'
+        };
+      case 'TRANSACTION_COMPLETED':
+        return { 
+          icon: CheckCircle2, 
+          label: 'Transaction completed safely', 
+          desc: 'Transfer verified and completed without detected fraud.',
+          color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/40',
+          severity: 'SAFE_COMPLETION'
+        };
+      case 'TRANSACTION_CANCELLED':
+        return { 
+          icon: ShieldX, 
+          label: 'Simulated Action: Transaction cancelled by user', 
+          desc: 'Simulated action: User cancelled transfer upon warning. No real banking transfer executed or blocked.',
+          color: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/50',
+          severity: 'HALTED_SAFE'
         };
       case 'COACHED_BEHAVIOUR_TRIGGERED':
         return { 
           icon: Sparkles, 
           label: 'Coached behaviour pattern detected', 
-          desc: 'Sensor telemetry confirms voice coaching cadence & app switching.',
+          desc: 'Sensor telemetry confirms voice coaching cadence, rapid switching, or dictated input.',
           color: 'text-red-400 bg-red-500/15 border-red-500/40',
           severity: 'SCAM_DETECTED'
         };
       case 'INTERVENTION_TRIGGERED':
         return { 
           icon: AlertOctagon, 
-          label: 'Scam intervention triggered', 
-          desc: 'Warning modal presented to user. Outbound transfer halted.',
+          label: 'Emergency scam intervention triggered', 
+          desc: 'Elderly-safe high-contrast warning modal presented to user. Outbound transfer halted.',
           color: 'text-red-400 bg-red-500/20 border-red-500/50',
           severity: 'INTERVENTION'
+        };
+      case 'APP_SWITCH':
+        return { 
+          icon: ArrowRight, 
+          label: 'App switch event', 
+          desc: 'Application focus transitioned across active apps.',
+          color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+          severity: 'CADENCE'
+        };
+      case 'NAVIGATION_BACK':
+        return { 
+          icon: Clock, 
+          label: 'Navigation reversal', 
+          desc: 'Back button click or screen navigation reversal recorded.',
+          color: 'text-slate-400 bg-slate-800 border-slate-700',
+          severity: 'NAVIGATION'
+        };
+      case 'AUTHENTICATION_EVENT':
+        return { 
+          icon: Lock, 
+          label: 'Authentication event verified', 
+          desc: 'Biometric or device-local authentication succeeded.',
+          color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/40',
+          severity: 'AUTH'
         };
       default:
         return { 
@@ -90,19 +149,19 @@ export const SecurityTimeline = () => {
     }
   };
 
-  const getOutcomeBadge = (outcome, score) => {
+  const getOutcomeBadge = (outcome, score, hasCancelEvent) => {
     if (outcome === 'INTERRUPTED') {
       return (
         <span className="px-3 py-1 rounded-full bg-red-500/15 border border-red-500/40 text-red-300 font-bold text-xs flex items-center gap-1.5 font-mono">
           <ShieldX className="w-3.5 h-3.5 text-red-400" />
-          <span>INTERRUPTED (SCAM BLOCKED)</span>
+          <span>INTERRUPTED ({hasCancelEvent ? 'USER CANCELLED' : 'SCAM HALTED'})</span>
         </span>
       );
     } else if (outcome === 'ALLOWED') {
       return (
         <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 font-mono">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>ALLOWED (USER TRUSTED)</span>
+          <span>ALLOWED (SAFE / TRUSTED)</span>
         </span>
       );
     } else {
@@ -114,6 +173,8 @@ export const SecurityTimeline = () => {
       );
     }
   };
+
+  const hasCancelledEvent = rawEvents.some((e) => e.event_type === 'TRANSACTION_CANCELLED');
 
   // Filter events
   const filteredEvents = rawEvents.filter((ev) => {
@@ -151,19 +212,23 @@ export const SecurityTimeline = () => {
             </p>
           </div>
 
-          {/* Session Switcher */}
+          {/* Session Switcher with Distinct Historical vs Live Badges */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <span className="text-xs text-slate-400 font-mono">Inspect Session:</span>
             <select
               value={selectedTimelineSessionId}
               onChange={(e) => selectTimelineSession(e.target.value)}
-              className="bg-slate-900 text-slate-200 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer"
+              className="bg-slate-900 text-slate-200 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer max-w-xs md:max-w-md"
             >
-              {sessionsList.map((s) => (
-                <option key={s.session_id} value={s.session_id}>
-                  {s.session_id} ({s.final_outcome || 'ACTIVE'} • Risk {Math.round(s.risk_score)}%)
-                </option>
-              ))}
+              {sessionsList.map((s) => {
+                const isHist = s.session_id.startsWith('hist-');
+                const tag = isHist ? '[Historical Benchmark]' : '[Live Scenario Run]';
+                return (
+                  <option key={s.session_id} value={s.session_id}>
+                    {tag} {s.session_id} ({s.final_outcome || 'ACTIVE'} • Risk {Math.round(s.risk_score)}%)
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
@@ -172,8 +237,22 @@ export const SecurityTimeline = () => {
         <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-4">
             <div>
+              <span className="text-[10px] text-slate-500 font-mono uppercase block">Session Type</span>
+              {isHistoricalSession ? (
+                <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px] uppercase font-bold flex items-center gap-1 mt-0.5">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <span>Historical Benchmark Record</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-md bg-cyan-950 border border-cyan-500/50 text-cyan-300 font-mono text-[10px] uppercase font-bold flex items-center gap-1 mt-0.5 animate-pulse">
+                  <Zap className="w-3 h-3 text-cyan-400" />
+                  <span>Live Executed Scenario Run</span>
+                </span>
+              )}
+            </div>
+            <div>
               <span className="text-[10px] text-slate-500 font-mono uppercase block">Session ID</span>
-              <strong className="font-mono text-cyan-400">{currentSessionData?.session_id || selectedTimelineSessionId}</strong>
+              <strong className="font-mono text-cyan-400">{activeSessId}</strong>
             </div>
             <div>
               <span className="text-[10px] text-slate-500 font-mono uppercase block">Start Time</span>
@@ -193,7 +272,7 @@ export const SecurityTimeline = () => {
             </div>
           </div>
 
-          {getOutcomeBadge(currentSessionData?.final_outcome, currentSessionData?.risk_score)}
+          {getOutcomeBadge(currentSessionData?.final_outcome, currentSessionData?.risk_score, hasCancelledEvent)}
         </div>
       </div>
 
@@ -239,8 +318,10 @@ export const SecurityTimeline = () => {
         {filteredEvents.length === 0 ? (
           <div className="py-16 text-center text-slate-500">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-600" />
-            <h4 className="text-sm font-bold text-slate-300">No Events Match Filter</h4>
-            <p className="text-xs text-slate-500 mt-1">Try selecting a different filter or advance the simulator in Live Protection.</p>
+            <h4 className="text-sm font-bold text-slate-300">No Events Recorded For This Session</h4>
+            <p className="text-xs text-slate-500 mt-1">
+              Select a scenario on the Live Protection tab and click "Next Step" or "Auto-Play Demo" to generate telemetry.
+            </p>
           </div>
         ) : (
           <div className="relative pl-7 md:pl-9 border-l-2 border-slate-800 space-y-7">
@@ -289,6 +370,13 @@ export const SecurityTimeline = () => {
                     <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
                       {meta.desc}
                     </p>
+
+                    {/* Disclaimer if cancellation event */}
+                    {ev.event_type === 'TRANSACTION_CANCELLED' && (
+                      <div className="mt-2.5 p-2 rounded bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs leading-snug">
+                        <strong>Simulation Compliance Note:</strong> This is a simulated cancellation action. GuardianAI does not claim to block a real banking transfer.
+                      </div>
+                    )}
 
                     {/* Metadata Parameter Chips */}
                     {ev.metadata && Object.keys(ev.metadata).length > 0 && (

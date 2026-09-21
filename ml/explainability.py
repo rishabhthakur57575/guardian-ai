@@ -20,7 +20,12 @@ import sys
 from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
-import shap
+try:
+    import shap
+    HAS_SHAP = True
+except ImportError:
+    shap = None
+    HAS_SHAP = False
 import xgboost as xgb
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,8 +115,11 @@ class GuardianShapExplainer:
         self.model.load_model(self.model_path)
         self.preprocessor = PreprocessingPipeline.load(self.preprocessor_path)
 
-        # Initialize SHAP TreeExplainer
-        self.explainer = shap.TreeExplainer(self.model)
+        # Initialize SHAP TreeExplainer if available
+        if HAS_SHAP and shap is not None:
+            self.explainer = shap.TreeExplainer(self.model)
+        else:
+            self.explainer = None
 
     @classmethod
     def get_instance(cls, model_dir: Optional[str] = None) -> "GuardianShapExplainer":
@@ -136,20 +144,32 @@ class GuardianShapExplainer:
         features_df = extract_features_from_dict(raw_features)
         features_scaled = self.preprocessor.transform(features_df)
 
-        # 2. Compute TreeExplainer SHAP values
-        # sv has shape (1, n_features, n_classes) where classes = [0: LEGIT, 1: SUSP, 2: SCAM]
-        sv = self.explainer.shap_values(features_scaled)
-        if isinstance(sv, list):
-            # If list of classes
-            shap_scam = sv[2][0]
-            shap_susp = sv[1][0]
+        # 2. Compute TreeExplainer SHAP values (or heuristic vector fallback if shap is unavailable)
+        if self.explainer is not None:
+            # sv has shape (1, n_features, n_classes) where classes = [0: LEGIT, 1: SUSP, 2: SCAM]
+            sv = self.explainer.shap_values(features_scaled)
+            if isinstance(sv, list):
+                shap_scam = sv[2][0]
+                shap_susp = sv[1][0]
+            else:
+                shap_scam = sv[0, :, 2]
+                shap_susp = sv[0, :, 1]
+            risk_shap_vector = (shap_susp * 0.5) + shap_scam
         else:
-            # ndarray shape (1, 23, 3)
-            shap_scam = sv[0, :, 2]
-            shap_susp = sv[0, :, 1]
-
-        # Weighted risk SHAP attribution (combining suspicious 0.5x and scam 1.0x contributions)
-        risk_shap_vector = (shap_susp * 0.5) + shap_scam
+            # Fallback feature importance attribution
+            risk_shap_vector = np.zeros(len(ALL_MODEL_FEATURES))
+            for i, f in enumerate(ALL_MODEL_FEATURES):
+                val = float(features_df[f].iloc[0])
+                if "new_beneficiary" in f and val > 0:
+                    risk_shap_vector[i] = 0.35
+                elif "screen_share" in f and val > 0:
+                    risk_shap_vector[i] = 0.30
+                elif "transaction" in f and val > 25000:
+                    risk_shap_vector[i] = 0.25
+                elif "app_switch" in f and val >= 3:
+                    risk_shap_vector[i] = 0.15
+                elif "coached" in f and val > 0:
+                    risk_shap_vector[i] = 0.20
 
         # 3. Model predicted probabilities and calibrated risk score
         probs = self.model.predict_proba(features_scaled)[0]

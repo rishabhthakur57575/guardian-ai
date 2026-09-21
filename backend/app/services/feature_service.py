@@ -92,4 +92,85 @@ def extract_features(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if features["screen_sharing_active"] and features["beneficiary_added"]:
         features["rapid_beneficiary_addition"] = True
 
+    # ML Pipeline Raw Telemetry Features
+    app_switch_count = 0
+    nav_back_count = 0
+    auth_event = 0
+    known_assistant = 0
+    first_time_assistance = 0
+    assistance_history = 0
+    screen_share_duration = 0.0
+
+    timestamps = []
+    for ev in events:
+        meta = ev.get("metadata", {}) or {}
+        etype = str(ev.get("event_type", "")).upper()
+        ts = ev.get("timestamp")
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                ts = None
+        if ts:
+            timestamps.append(ts)
+
+        if "APP_SWITCH" in etype or meta.get("app_switch_count") or meta.get("rapid_app_switch"):
+            app_switch_count += int(meta.get("app_switch_count", 1))
+
+        if "NAVIGATION_BACK" in etype or meta.get("navigation_back_count"):
+            nav_back_count += int(meta.get("navigation_back_count", 1))
+
+        if "AUTHENTICATION" in etype or meta.get("authentication_event") or meta.get("auth_method"):
+            auth_event = 1
+
+        if "known_assistant" in meta:
+            known_assistant = int(meta["known_assistant"])
+        if "first_time_assistance" in meta:
+            first_time_assistance = int(meta["first_time_assistance"])
+        if "assistance_history" in meta:
+            assistance_history = int(meta["assistance_history"])
+
+        if "screen_share_duration" in meta:
+            screen_share_duration = max(screen_share_duration, float(meta["screen_share_duration"]))
+
+    session_duration = 60.0
+    time_between_events = 3.0
+    if len(timestamps) >= 2:
+        timestamps.sort()
+        delta = (timestamps[-1] - timestamps[0]).total_seconds()
+        session_duration = max(float(delta), 30.0)
+        time_between_events = max(float(delta) / max(len(timestamps) - 1, 1), 0.5)
+
+    if features["screen_sharing_active"] and screen_share_duration == 0.0:
+        screen_share_duration = min(session_duration, 180.0)
+
+    # If first_time_assistance was not set explicitly but screen sharing is active and known_assistant is False
+    if features["screen_sharing_active"] and not known_assistant and first_time_assistance == 0 and assistance_history == 0:
+        first_time_assistance = 1
+
+    features["banking_app_opened"] = bool(features["banking_app_opened"])
+    features["screen_sharing_active"] = bool(features["screen_sharing_active"])
+    features["beneficiary_added"] = bool(features["beneficiary_added"])
+
+    has_ml_telemetry = any(
+        "screen_share_duration" in (ev.get("metadata") or {})
+        or "use_ml_inference" in (ev.get("metadata") or {})
+        or "known_assistant" in (ev.get("metadata") or {})
+        for ev in events
+    )
+
+    if has_ml_telemetry:
+        features["screen_share_duration"] = float(screen_share_duration)
+        features["session_duration"] = float(session_duration)
+        features["time_between_events"] = float(time_between_events)
+        features["new_beneficiary"] = 1 if features["beneficiary_added"] else 0
+        features["transaction_amount"] = float(features["transfer_amount"])
+        features["app_switch_count"] = int(app_switch_count)
+        features["known_assistant"] = int(known_assistant)
+        features["first_time_assistance"] = int(first_time_assistance)
+        features["transaction_velocity"] = round(features["transaction_amount"] / (session_duration + 1.0), 4)
+        features["navigation_back_count"] = int(nav_back_count)
+        features["authentication_event"] = int(auth_event)
+        features["assistance_history"] = int(assistance_history)
+
     return features

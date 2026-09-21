@@ -51,6 +51,11 @@ class RiskScoreResponse(BaseModel):
     risk_factors: List[RiskFactor]
     recommended_action: str # NONE, MONITOR, INTERVENE
     evaluated_at: datetime
+    detected_signals: Optional[List[str]] = None
+    predicted_class: Optional[str] = None
+    class_probabilities: Optional[Dict[str, float]] = None
+    shap_explanation: Optional[Dict[str, Any]] = None
+    human_explanation: Optional[Dict[str, Any]] = None
 
 class InterventionCreate(BaseModel):
     session_id: str = Field(..., min_length=1)

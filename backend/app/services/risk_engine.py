@@ -106,8 +106,18 @@ class HeuristicRiskPredictor:
         else:
             risk_level = "SAFE"
             recommended_action = "NONE"
-            if not reasons:
-                reasons.append("Normal device behavioural baseline maintained.")
+        # Generate human explanation if possible
+        human_exp = None
+        try:
+            from ml.human_explanation import generate_human_explanation
+            human_exp = generate_human_explanation([r.lower() for r in reasons], context=features)
+        except Exception:
+            human_exp = {
+                "headline": "Telemetry monitoring active." if final_score < 30 else "Potential suspicious behaviour detected.",
+                "key_observations": reasons,
+                "recommended_action": "No action required." if final_score < 30 else "Review ongoing activity carefully.",
+                "provider_type": "HEURISTIC"
+            }
 
         return RiskScoreResponse(
             session_id=session_id,
@@ -116,7 +126,9 @@ class HeuristicRiskPredictor:
             reasons=reasons,
             risk_factors=risk_factors,
             recommended_action=recommended_action,
-            evaluated_at=datetime.now(timezone.utc)
+            evaluated_at=datetime.now(timezone.utc),
+            detected_signals=reasons,
+            human_explanation=human_exp
         )
 
 class MLRiskPredictor:
@@ -154,6 +166,18 @@ class MLRiskPredictor:
                 if isinstance(result, RiskScoreResponse):
                     return result
                 if isinstance(result, dict):
+                    level_map = {
+                        "HIGH": "THREAT_DETECTED",
+                        "MEDIUM": "MONITORING",
+                        "LOW": "SAFE",
+                        "THREAT_DETECTED": "THREAT_DETECTED",
+                        "MONITORING": "MONITORING",
+                        "SAFE": "SAFE"
+                    }
+                    if "risk_level" in result:
+                        result["risk_level"] = level_map.get(result["risk_level"], result["risk_level"])
+                    if "session_id" not in result or not result["session_id"]:
+                        result["session_id"] = session_id or "session-live"
                     return RiskScoreResponse(**result)
             except Exception as exc:
                 logger.error("ML model inference failed (%s), falling back to heuristic.", exc)

@@ -63,24 +63,29 @@ export const apiService = {
   },
 
   // Simulator Endpoints
-  simulatorStep: async (sessionId = 'demo-session-live') => {
-    const res = await api.post('/simulator/step', null, {
-      params: { session_id: sessionId }
-    });
+  simulatorStep: async (sessionId = 'demo-session-live', scenarioId = null) => {
+    const params = { session_id: sessionId };
+    if (scenarioId) params.scenario_id = scenarioId;
+    const res = await api.post('/simulator/step', null, { params });
     return res.data;
   },
 
-  simulatorReset: async (sessionId = 'demo-session-live') => {
-    const res = await api.post('/simulator/reset', null, {
-      params: { session_id: sessionId }
-    });
+  simulatorReset: async (sessionId = 'demo-session-live', scenarioId = null) => {
+    const params = { session_id: sessionId };
+    if (scenarioId) params.scenario_id = scenarioId;
+    const res = await api.post('/simulator/reset', null, { params });
     return res.data;
   },
 
-  getSimulatorState: async (sessionId = 'demo-session-live') => {
-    const res = await api.get('/simulator/state', {
-      params: { session_id: sessionId }
-    });
+  getSimulatorState: async (sessionId = 'demo-session-live', scenarioId = null) => {
+    const params = { session_id: sessionId };
+    if (scenarioId) params.scenario_id = scenarioId;
+    const res = await api.get('/simulator/state', { params });
+    return res.data;
+  },
+
+  getSimulatorScenarios: async () => {
+    const res = await api.get('/simulator/scenarios');
     return res.data;
   }
 };

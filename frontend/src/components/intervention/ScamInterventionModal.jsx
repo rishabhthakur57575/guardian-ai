@@ -166,9 +166,12 @@ export const ScamInterventionModal = () => {
         </div>
 
         {/* Reassurance text */}
-        <div className="text-center mt-4">
-          <p className="text-[11px] text-slate-400">
-            Cancelling stops the transaction immediately. Your account balance remains completely safe.
+        <div className="text-center mt-4 space-y-1">
+          <p className="text-[11px] text-slate-300">
+            <strong>Simulated Action:</strong> Cancelling stops the simulated transfer. GuardianAI operates in behavioral simulation mode and does not claim to block a real bank transfer.
+          </p>
+          <p className="text-[10px] text-slate-400">
+            Note: Choosing to trust this person overrides this single transaction only. It will not automatically whitelist or verify the remote assistant for future sessions.
           </p>
           <button
             onClick={() => {
